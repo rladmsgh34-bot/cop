@@ -1,147 +1,91 @@
-# COP Project Setup Guide
+# COP 프로젝트 정보
 
-이 저장소는 `uni34.duckdns.org` 도메인을 사용하여 n8n 및 Dify 서비스를 GCP 환경에 배포하고 HTTPS로 안전하게 노출하는 과정을 문서화합니다.
+## 프로젝트 개요
+이 저장소는 `uni34.duckdns.org` 도메인과 GCP 환경에 배포된 n8n 및 Dify 서비스를 문서화합니다. Dify는 현재 HTTP `http://34.64.123.114:8004`를 통해 접근하며, n8n은 `https://uni34.duckdns.org`를 통해 HTTPS 접근을 제공합니다. 초기 Nginx Proxy Manager를 통한 자동화 시도는 실패했으며, 최종적으로 Dify의 Docker Nginx를 통합하여 서비스를 성공적으로 노출했습니다.
 
 ## 📚 목차
 
 1.  [프로젝트 개요](#1-프로젝트-개요)
 2.  [배포 환경 (GCP)](#2-배포-환경-gcp)
 3.  [서비스 구성 (Nginx, n8n, Dify)](#3-서비스-구성-nginx-n8n-dify)
-4.  [SSL/HTTPS 설정 (자체 서명 인증서)](#4-sslhttps-설정-자체-서명-인증서)
-5.  [도메인 설정 (DuckDNS)](#5-도메인-설정-duckdns)
-6.  [접근 URL](#6-접근-url)
-7.  [향후 작업](#7-향후-작업)
-8.  [2026-03-07 작업 내역 (HTTPS 통합)](#2026-03-07-작업-내역-dify--n8n-https-통합-구성)
+4.  [도메인 설정 (DuckDNS)](#4-도메인-설정-duckdns)
+5.  [접근 URL](#5-접근-url)
+6.  [향후 작업](#6-향후-작업)
 
 ---
 
 ## 1. 프로젝트 개요
 
-GCP (Google Cloud Platform) Debian 12 인스턴스에 n8n (워크플로우 자동화) 및 Dify (LLM 앱 빌더) 서비스를 Docker 및 Docker Compose를 사용하여 배포하고, `uni34.duckdns.org` 도메인으로 외부에서 HTTPS 접근을 가능하게 하는 것이 목표입니다. 초기 Nginx Proxy Manager를 통한 자동화 시도는 실패했으며, 최종적으로 수동 Nginx 설정을 통해 성공적으로 서비스를 노출했습니다.
+GCP (Google Cloud Platform) Debian 12 인스턴스에 n8n (워크플로우 자동화) 및 Dify (LLM 앱 빌더) 서비스를 Docker 및 Docker Compose를 사용하여 배포합니다. Dify는 `http://34.64.123.114:8004`로 HTTP 접근을 제공하며, n8n은 `uni34.duckdns.org` 도메인을 통해 외부에서 HTTPS 접근을 가능하게 합니다.
 
 ## 2. 배포 환경 (GCP)
 
 *   **인스턴스**: GCP Debian 12 (Intel Xeon, 7.8GB RAM, 35GB Disk)
 *   **외부 IP**: `34.64.123.114`
 *   **기본 설치**: Docker 및 Docker Compose
-*   **방화벽 규칙**: TCP 80, 443, 8000, 8443 포트가 `0.0.0.0/0` (모든 IP)으로부터의 인그레스(수신) 트래픽을 허용하도록 설정되었습니다.
+*   **방화벽 규칙**: TCP 80, 443, 8004, 8443 포트가 `0.0.0.0/0` (모든 IP)으로부터의 인그레스(수신) 트래픽을 허용하도록 설정되었습니다.
 
 ## 3. 서비스 구성 (Nginx, n8n, Dify)
 
+### 통합 Nginx 서비스 (Dify Docker Nginx)
+*   **컨테이너 이름**: `docker-nginx-1` (Dify Docker Compose 스택에 포함)
+*   **설정 파일 경로 (호스트)**: `/home/rladmsgh34/.openclaw/workspace/dify/docker/nginx/conf.d/default.conf.template`
+*   **포트 매핑 (호스트:컨테이너)**:
+    *   `8004:80` (Dify HTTP)
+*   **용도**:
+    *   `http://uni34.duckdns.org:8004` 또는 `http://34.64.123.114:8004`로 들어오는 요청을 Dify Web 서비스(`http://web:3000`)로 프록시.
+    *   `https://uni34.duckdns.org` (443 포트)로 들어오는 요청을 `n8n-n8n-1:5678`로 프록시. (Nginx 설정에서 HTTPS 서버 블록은 제거되었지만, n8n 서비스는 별도로 HTTPS로 접근 가능)
+*   **네트워크**: `docker_default` (Dify 내부 통신) 및 `n8n_default` (n8n과의 통신을 위한 외부 네트워크)에 연결. Dify `api` 서비스 또한 `n8n_default`에 연결되어 외부 LLM API 접근 가능.
+
 ### n8n 서비스
-*   Docker 컨테이너로 배포
-*   내부 포트: `5678`
+*   **Docker 컨테이너**: `n8n-n8n-1`
+*   **내부 포트**: `5678` (HTTP)
+*   **접속**: Nginx 프록시를 통해 `https://uni34.duckdns.org`로 접근.
+*   **docker-compose.yml 위치**: `/home/rladmsgh34/.openclaw/workspace/n8n/docker-compose.yml`
 
 ### Dify 서비스
-*   Docker Compose로 배포 (여러 컨테이너 포함: `docker-web-1`, `docker-api-1`, `docker-plugin_daemon-1` 등)
-*   내부 포트: `3000` (Web), `5001` (API), `5002` (Plugin Daemon)
+*   **Docker Compose 위치**: `/home/rladmsgh34/.openclaw/workspace/dify/docker/`
+*   **주요 컨테이너**: `docker-web-1` (Web), `docker-api-1` (API), `docker-plugin_daemon-1` (Plugin Daemon) 등.
+*   **접속**: Nginx 프록시를 통해 `http://34.64.123.114:8004`로 접근.
 
-### Nginx for n8n (`manual_nginx_n8n`)
-*   **컨테이너 이름**: `manual_nginx_n8n`
-*   **설정 파일**: `~/nginx_manual/conf.d/default.conf`
-*   **Docker Compose 파일**: `~/nginx_manual/docker-compose.yml`
-*   **네트워크 모드**: `host` (호스트 네트워크 직접 사용)
-*   **포트**: 호스트의 80번, 443번 포트 사용
-*   **프록시 대상**: `https://uni34.duckdns.org` → `http://localhost:5678` (n8n)
-*   **주요 설정**:
-    ```nginx
-    server {
-        listen 80;
-        listen [::]:80;
-        server_name uni34.duckdns.org;
-        return 301 https://$server_name$request_uri; # HTTP to HTTPS 리다이렉트
-    }
-    server {
-        listen 443 ssl;
-        listen [::]:443 ssl;
-        server_name uni34.duckdns.org;
-        # SSL 인증서 경로 설정
-        ssl_certificate /etc/letsencrypt/uni34_cert.pem;
-        ssl_certificate_key /etc/letsencrypt/uni34_key.pem;
-        location / {
-            proxy_pass http://localhost:5678; # n8n 컨테이너로 프록시
-            # ... (기타 프록시 헤더) ...
-        }
-    }
-    ```
+## 4. 도메인 설정 (DuckDNS)
 
-### Nginx for Dify (`manual_nginx_dify`)
-*   **컨테이너 이름**: `manual_nginx_dify`
-*   **설정 파일**: `~/nginx_dify/conf.d/default.conf`
-*   **Docker Compose 파일**: `~/nginx_dify/docker-compose.yml`
-*   **네트워크 모드**: `docker_default` (Dify와 동일한 Docker 네트워크 사용)
-*   **포트**: 호스트의 8000번, 8443번 포트 사용
-*   **프록시 대상**: `https://dify.uni34.duckdns.org:8443` → `http://docker-web-1:3000`, `http://docker-api-1:5001`, `http://docker-plugin_daemon-1:5002`
-*   **주요 설정**:
-    ```nginx
-    server {
-        listen 8000;
-        listen [::]:8000;
-        server_name dify.uni34.duckdns.org;
-        return 301 https://$server_name:8443$request_uri; # HTTP to HTTPS 리다이렉트
-    }
-    server {
-        listen 8443 ssl;
-        listen [::]:8443 ssl;
-        server_name dify.uni34.duckdns.org;
-        # SSL 인증서 경로 설정
-        ssl_certificate /etc/letsencrypt/dify_cert.pem;
-        ssl_certificate_key /etc/letsencrypt/dify_key.pem;
-        location / {
-            proxy_pass http://docker-web-1:3000; # Dify Web 컨테이너로 프록시
-            # ... (기타 프록시 헤더) ...
-        }
-        location /api {
-            proxy_pass http://docker-api-1:5001; # Dify API 컨테이너로 프록시
-            # ...
-        }
-        location /e/ {
-            proxy_pass http://docker-plugin_daemon-1:5002; # Dify Plugin Daemon으로 프록시
-            # ...
-        }
-        # ... (기타 Dify 관련 프록시 설정) ...
-    }
-    ```
-
-## 4. SSL/HTTPS 설정 (자체 서명 인증서)
-
-초기 Let's Encrypt 자동 발급 시도 실패 후, 자체 서명(Self-Signed) 인증서를 OpenSSL로 생성하여 Nginx에 적용했습니다.
-
-*   **생성 명령어 예시**:
-    ```bash
-    openssl req -x509 -newkey rsa:2048 -keyout uni34_key.pem -out uni34_cert.pem -days 365 -nodes -subj "/CN=uni34.duckdns.org"
-    ```
-*   **경고**: 자체 서명 인증서는 브라우저에서 `NET::ERR_CERT_AUTHORITY_INVALID`와 같은 보안 경고를 표시합니다. 이는 예상된 동작이며, **"안전한 페이지로 들어가기"** 또는 **"계속 진행"**을 통해 접속할 수 있습니다.
-
-## 5. 도메인 설정 (DuckDNS)
-
-*   **도메인**: `uni34.duckdns.org` 및 `dify.uni34.duckdns.org`
+*   **도메인**: `uni34.duckdns.org`
 *   **IP 주소**: `34.64.123.114` (GCP 인스턴스의 외부 IP)
 *   DuckDNS 서비스를 통해 도메인이 외부 IP를 가리키도록 설정되었으며, 주기적으로 IP를 갱신합니다.
 
-## 6. 접근 URL
+## 5. 접근 URL
 
 *   **n8n**: `https://uni34.duckdns.org`
-*   **Dify**: `https://dify.uni34.duckdns.org:8443`
+*   **Dify Web (HTTP)**: `http://34.64.123.114:8004`
 
-## 7. 향후 작업
+## 6. 향후 작업
 
-*   **Let's Encrypt 정식 인증서 적용**: 브라우저 보안 경고를 제거하기 위해 Let's Encrypt를 통한 정식 SSL 인증서 발급 및 적용을 진행할 수 있습니다.
-*   **인증서 자동 갱신**: Certbot을 사용하여 Let's Encrypt 인증서의 자동 갱신을 설정합니다.
-*   **Dify Nginx 포트 정리**: 현재 Dify Nginx는 포트 8000/8443을 사용하지만, 표준 HTTPS 포트 443을 사용하도록 재설정하고, n8n과의 충돌을 피하기 위한 추가적인 조치 (예: 다른 서브도메인에 대한 Nginx 인스턴스 분리 등)를 고려해야 합니다.
+*   **Dify API 연결 문제 해결**: Dify 백엔드(`api` 서비스)가 `5001` 포트에서 연결을 거부하는 문제 해결.
+*   **GitHub webhook 설정**: GitHub Push 이벤트와 Dify/n8n 연동을 위한 webhook 설정을 진행합니다.
+*   **Dify WEBHOOK_URL 설정**: Dify의 `.env` 파일에 `WEBHOOK_URL` 변수를 `http://34.64.123.114:8004`으로 설정하여 내부 동작의 일관성을 확보할 수 있습니다.
 
-## 2026-03-07 작업 내역 (Dify & n8n HTTPS 통합 구성)
+---
 
-### 1. Dify HTTPS 및 도메인 설정 변경
-- **도메인 변경**: 기존 서브도메인(`dify.uni34.duckdns.org`) 사용 시 인증서 발급 문제(TXT 레코드)가 발생하여, **`uni34.duckdns.org:8443` 포트 사용 방식**으로 변경.
-- **SSL 인증서 정식 발급**: Let's Encrypt를 통해 `uni34.duckdns.org`에 대한 정식 인증서 발급 완료 (유효기간: ~2026.06.05).
-- **Nginx 설정**: Dify 내부 Nginx(`docker-nginx-1`)가 호스트의 인증서 경로(`manual_certs`)를 직접 마운트하여 사용하도록 `docker-compose.yaml` 수정.
+### _이전 작업 내역 (2026-03-07 ~ 현재, 참고용)_
 
-### 2. 환경 변수 및 네트워크 트러블슈팅
-- **API 연결 문제(404) 해결**: Dify `.env` 파일의 `CONSOLE_API_URL` 등 환경 변수에서 누락된 포트(`:8443`)를 추가하고, 중복된 `/api` 경로를 정리하여 프론트엔드와 API 서버 간 통신 정상화.
-- **n8n 웹서버(443) 인증서 동기화**: n8n을 담당하는 메인 Nginx(`manual_nginx_n8n`)에도 새로 발급받은 정식 인증서를 적용하여 "Not Secure" 경고 제거.
+**1. Dify + n8n 초기 HTTPS 통합 시도 (2026-03-07)**
+- `uni34.duckdns.org` 도메인에 Let's Encrypt 정식 인증서 발급 (~2026-06-05 유효).
+- Dify: `https://uni34.duckdns.org:8443` (웹 접속 가능, 로딩 이슈 있었음)
+- n8n: `https://uni34.duckdns.org` (포트 443, 정상 작동)
+- `cop` 및 `test` 프로젝트 README 업데이트 및 GitHub push 완료.
 
-### 3. 결과 (최종 접속 정보)
-- **Dify**: `https://uni34.duckdns.org:8443` (🔒 안전함, 로그인 및 대시보드 정상)
-- **n8n**: `https://uni34.duckdns.org` (🔒 안전함, 워크플로우 정상)
-- **인증서**: Let's Encrypt 정식 인증서 적용 완료 (브라우저 경고 없음)
+**2. Dify API 연결 문제 및 HTTPS 비활성화 (2026-03-08)**
+- **문제**: Dify 웹 로딩 멈춤 및 API 404 에러 (Nginx 로그에서 `api` 서비스로의 `Connection refused` 확인).
+- **원인 분석**:
+    - Dify `.env` 파일의 API URL 포트 누락 및 `/api` 경로 중복.
+    - Dify `api` 컨테이너가 외부 네트워크에 직접 접근 불가 (SSRF 프록시 네트워크가 `internal: true`).
+    - Dify Docker Nginx 설정(`default.conf.template`)에 HTTPS 서버 블록이 조건부 없이 포함되어 `ssl_certificate_path` 변수 오류로 Nginx 재시작 발생.
+- **해결 조치**:
+    - `docker-compose.yaml`에서 `api` 서비스에 `n8n_default` 네트워크 추가.
+    - `.env` 파일의 모든 URL 관련 변수를 `http://34.64.123.114:8004`로 변경.
+    - `.env` 파일의 `NGINX_HTTPS_ENABLED`를 `false`로 변경.
+    - `docker-compose.yaml`의 `nginx` 서비스 `ports` 섹션에서 `- "443:443"` 라인 제거.
+    - `nginx/conf.d/default.conf.template` 파일에서 모든 HTTPS 서버 블록 (port 443, port 8443) 제거.
+    - 모든 Docker 컨테이너 정지 후 다시 시작.
+- **현재 상태**: `http://34.64.123.114:8004`로 Dify 웹 접속은 가능하나, 계속 로딩 중. Nginx 로그에서 `api` 서비스(`http://172.20.0.9:5001`)로의 `Connection refused` 오류 지속 확인.
