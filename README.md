@@ -36,7 +36,6 @@ GitHub에 코드가 Push될 때마다 AI가 변경 사항을 분석하여 시스
 ```
 GitHub Push ──→ Webhook ──→ n8n Workflow ──┬──→ Dify (LLM 분석 AI)
                                            └──→ SonarQube (Static Analysis) ───→ Feedback
-
 ```
 
 ---
@@ -46,9 +45,52 @@ GitHub Push ──→ Webhook ──→ n8n Workflow ──┬──→ Dify (LL
 - **플랫폼**: GCP (Google Cloud Platform)
 - **운영체제**: Debian 12
 - **도메인 및 IP 정보:**
-  - n8n / HTTPS 서버: [https://uni34.duckdns.org](https://uni34.duckdns.org)
-  - AI (HTTP): [34.64.123.114:8004](http://34.64.123.114:8004)
-  - SonarQube(품질 데쉬):  접근 `http 결과`
-...
-json
-...
+  - **n8n (자동화 엔진):** [https://uni34.duckdns.org](https://uni34.duckdns.org)
+  - **Dify (AI):** [http://34.64.123.114:8004](http://34.64.123.114:8004)
+  - **SonarQube (품질 분석):** [http://34.64.123.114:9000](http://34.64.123.114:9000)
+
+---
+
+## 서비스 구성
+
+### 핵심 서비스:
+
+- **n8n:** GitHub webhook을 활용한 자동화 트리거 및 워크플로우 관리.
+- **Dify:** 대규모 언어 모델(LLM)을 이용한 영향도 분석 및 의사결정 지원.
+- **SonarQube:** 정적 코드 분석 및 품질 개선 데이터를 제공.
+
+---
+
+## 도메인 설정
+
+- **도메인:** `uni34.duckdns.org`
+- **설명:** DuckDNS 서비스를 통해 도메인이 GCP 외부 IP (`34.64.123.114`)를 가리키도록 구성.
+- **SSL 인증:** Let's Encrypt 인증서를 통해 **n8n** 서비스에서 HTTPS 액세스 지원.
+
+---
+
+## 관리 대상
+
+1. **n8n:** 자동화된 워크플로우 엔진.
+    - **접근 URL:** [https://uni34.duckdns.org](https://uni34.duckdns.org)
+    - **역할:** 데이터 통합 및 페이로드 처리.
+
+2. **Dify:** GitHub 등 외부 지식을 분석하여 품질 개선에 기여.
+    - **접근 URL:** [http://34.64.123.114:8004](http://34.64.123.114:8004)
+    - **역할:** LLM 모델 기반 분석 및 고급 의사 결정 지원.
+
+3. **SonarQube:** 코드 품질 관리를 위한 정적 분석 도구.
+    - **접근 URL:** [http://34.64.123.114:9000](http://34.64.123.114:9000)
+    - **상태:** 메모리 최적화 완료, n8n과 연동 진행 중.
+
+---
+
+## 향후 작업
+
+- **SonarQube 분석 자동화**: n8n 워크플로우에서 SonarQube 분석 결과를 처리하는 로직 추가.
+- **Dify 모델 고도화**: Push 발생 시 영향도 분석 AI 로직을 한 층 더 세밀하게 개선.
+- **보고 양식 개선**: 품질 활동 자동화 리포트를 가독성이 높은 양식으로 보완.
+
+---
+
+> 이 문서는 AI 비서 **코치**가 업데이트하고 관리합니다.
