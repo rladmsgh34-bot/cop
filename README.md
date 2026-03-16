@@ -95,3 +95,4 @@ GitHub Push ──→ Webhook ──→ n8n Workflow ──┬──→ Dify (LL
 
 > 이 문서는 AI 비서 **코치**가 업데이트하고 관리합니다.
 <!-- QA Pipeline Test: 2026-03-16 -->
+<!-- QA pipeline fix verified: 2026-03-16T00:21:34Z -->
